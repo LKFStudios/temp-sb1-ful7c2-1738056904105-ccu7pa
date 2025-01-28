@@ -1,0 +1,47 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Analyses collection rules
+    match /analyses/{analysisId} {
+      // Allow reading if the user owns the analysis or if it's public
+      allow read: if isOwner(resource.data.userId) || 
+                    resource.data.isPublic == true;
+      
+      // Allow creation if user is authenticated and sets themselves as owner
+      allow create: if isAuthenticated() && 
+                     request.resource.data.userId == request.auth.uid &&
+                     request.resource.data.timestamp == request.time;
+      
+      // Allow updates only by the owner and only certain fields
+      allow update: if isOwner(resource.data.userId) &&
+                     request.resource.data.userId == resource.data.userId;
+      
+      // Allow deletion only by the owner
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    // Users collection rules
+    match /users/{userId} {
+      // Allow users to read and write only their own data
+      allow read, write: if isOwner(userId);
+      
+      // Allow reading public profile information
+      allow read: if resource.data.isPublic == true;
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: false;
+    }
+  }
+}
